@@ -14,6 +14,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
          libapache2-mod-php5 | php5,
          mysql-client,
          php5-gd,
+	 php5-mcrypt,
          php5-mysql | php5-mysqlnd,
 Description: A WEB-based password manager
  TeamPass is a Passwords Manager dedicated for managing passwords
