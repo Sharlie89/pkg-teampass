@@ -1,1 +1,2 @@
+debian/teampass.conf.ex /etc/teampass
 TeamPass-master/* usr/share/teampass
