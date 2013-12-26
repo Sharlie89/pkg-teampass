@@ -1,5 +1,0 @@
-#!/bin/sh
-
-chown www-data:www-data /usr/share/teampass/
-
-#DEBHELPER#
