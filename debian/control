@@ -10,7 +10,7 @@ Homepage: http://www.teampass.net
 
 Package: teampass
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends},
          libapache2-mod-php5 | php5,
          mysql-client,
          php5-gd,
