@@ -1,5 +1,5 @@
 #THIS IS A BASIC APACHE2 CONFIGURATION FILE FOR TEAMPASS. PLEASE EDIT IT PROPERLY UNTIL STARTS A PRODUCTION SERVER
-#MOVE THE EXAMPLE FILE FROM /usr/share/teampass/teampass.conf.ex TO /etc/apache2/sites-availables/teampass.conf , THEN EXEC THE FOLLOWING COMMANDS
+#MOVE THE EXAMPLE FILE FROM /etc/teampass/teampass.conf.ex TO /etc/apache2/sites-availables/teampass.conf , THEN EXEC THE FOLLOWING COMMANDS
 # a2ensite teampass.conf
 # service apache2 reload
 
@@ -8,12 +8,12 @@
 <VirtualHost *:80>
         ServerAdmin webmaster@localhost
 
-        DocumentRoot /usr/share/teampass
+        DocumentRoot /srv/teampass
         <Directory />
                 Options FollowSymLinks
                 AllowOverride None
         </Directory>
-        <Directory /usr/share/teampass/>
+        <Directory /srv/teampass/>
                 Options Indexes FollowSymLinks MultiViews
                 AllowOverride None
                 Order allow,deny
