@@ -2,8 +2,8 @@
 /**
  * @file          logs.queries.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -12,9 +12,22 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
-if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
+if (
+    !isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || 
+    !isset($_SESSION['user_id']) || empty($_SESSION['user_id']) || 
+    !isset($_SESSION['key']) || empty($_SESSION['key'])) 
+{
     die('Hacking attempt...');
+}
+
+/* do checks */
+require_once $_SESSION['settings']['cpassman_dir'].'/sources/checks.php';
+if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_views")) {
+    $_SESSION['error']['code'] = ERR_NOT_ALLOWED; //not allowed page
+    include $_SESSION['settings']['cpassman_dir'].'/error.php';
+    exit();
 }
 
 global $k, $settings;
@@ -22,22 +35,27 @@ include $_SESSION['settings']['cpassman_dir'].'/includes/settings.php';
 header("Content-type: text/html; charset==utf-8");
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //Columns name
 $aColumns = array('id', 'label', 'description', 'tags', 'id_tree', 'folder', 'login');
 
 //init SQL variables
 $sOrder = $sLimit = "";
-$sWhere = "id_tree IN(".implode(',', $_SESSION['groupes_visibles']).")";    //limit search to the visible folders
+$where = new WhereClause('and');
+$where->add('id_tree IN %ls', $_SESSION['groupes_visibles']);   //limit search to the visible folders
 
 //get list of personal folders
 $array_pf = array();
 $list_pf = "";
-$rows = $db->fetchAllArray("SELECT id FROM ".$pre."nested_tree WHERE personal_folder=1 AND NOT title = ".$_SESSION['user_id']);
+$rows = DB::query("SELECT id FROM ".$pre."nested_tree WHERE personal_folder=%i AND NOT title = %s", 1, $_SESSION['user_id']);
 foreach ($rows as $reccord) {
     if (!in_array($reccord['id'], $array_pf)) {
         //build an array of personal folders ids
@@ -65,7 +83,7 @@ if (isset($_GET['iSortCol_0'])) {
     for ($i=0; $i<intval($_GET['iSortingCols']); $i++) {
         if ($_GET[ 'bSortable_'.intval($_GET['iSortCol_'.$i]) ] == "true") {
             $sOrder .= $aColumns[ intval($_GET['iSortCol_'.$i]) ]."
-                    ".mysql_real_escape_string($_GET['sSortDir_'.$i]) .", ";
+                    ".mysqli_escape_string($link, $_GET['sSortDir_'.$i]) .", ";
         }
     }
 
@@ -82,48 +100,23 @@ if (isset($_GET['iSortCol_0'])) {
    * on very large tables, and MySQL's regex functionality is very limited
 */
 if ($_GET['sSearch'] != "") {
-    $sWhere .= " AND ";
+    //$sWhere .= " AND ";
+    $subclause = $where->addClause('or');
     for ($i=0; $i<count($aColumns); $i++) {
-        $sWhere .= $aColumns[$i]." LIKE '%".mysql_real_escape_string($_GET['sSearch'])."%' OR ";
+        $subclause->add($aColumns[$i]." LIKE %ls", $_GET['sSearch']);
     }
-    $sWhere = substr_replace($sWhere, "", -3);
 }
 
 // Do NOT show the items in PERSONAL FOLDERS
 if (!empty($list_pf)) {
-    if (!empty($sWhere)) {
-        $sWhere .= " AND ";
-    }
-    $sWhere = "WHERE ".$sWhere."id_tree NOT IN (".$list_pf.") ";
-} else {
-    $sWhere = "WHERE ".$sWhere;
+    $where->add('id_tree NOT IN %ls', $list_pf);
 }
 
-$sql = "SELECT SQL_CALC_FOUND_ROWS *
-        FROM ".$pre."cache
-        $sWhere
-        $sOrder
-        $sLimit";
+$rows = DB::query("SELECT * FROM ".$pre."cache WHERE %l ".$sOrder." ".$sLimit, $where);
+$iFilteredTotal = DB::count();
 
-$rResult = mysql_query($sql) or die(mysql_error()." ; ".$sql);    //$rows = $db->fetchAllArray("
-
-/* Data set length after filtering */
-$sql_f = "
-        SELECT FOUND_ROWS()
-";
-$rResultFilterTotal = mysql_query($sql_f) or die(mysql_error());
-$aResultFilterTotal = mysql_fetchArray($rResultFilterTotal);
-$iFilteredTotal = $aResultFilterTotal[0];
-
-/* Total data set length */
-$sql_c = "
-        SELECT COUNT(id)
-        FROM   ".$pre."cache
-";
-$rResultTotal = mysql_query($sql_c) or die(mysql_error());
-$aResultTotal = mysql_fetchArray($rResultTotal);
-$iTotal = $aResultTotal[0];
-
+DB::query("SELECT * FROM ".$pre."cache");
+$iTotal = DB::count();
 
 /*
    * Output
@@ -134,7 +127,7 @@ $sOutput .= '"iTotalRecords": '.$iTotal.', ';
 $sOutput .= '"iTotalDisplayRecords": '.$iFilteredTotal.', ';
 $sOutput .= '"aaData": [ ';
 
-$rows = $db->fetchAllArray($sql);
+//$rows = DB::fetchAllArray($sql);
 foreach ($rows as $reccord) {
     $sOutput .= "[";
 
@@ -155,7 +148,7 @@ foreach ($rows as $reccord) {
     ) {
         $sOutput .= '"<img src=\"includes/images/lock.png\" />",';
     } else {
-        $txt = str_replace(array('\n', '<br />', '\\'), array(' ', ' ', ''), strip_tags(mysql_real_escape_string($reccord['description'])));
+        $txt = str_replace(array('\n', '<br />', '\\'), array(' ', ' ', ''), strip_tags(mysqli_escape_string($link, $reccord['description'])));
         if (strlen($txt) > 50) {
             $sOutput .= '"'.(substr(htmlspecialchars(stripslashes(preg_replace('/<[^>]*>|[\t]/', '', $txt)), ENT_QUOTES), 0, 50)).'",';
         } else {

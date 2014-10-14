@@ -2,8 +2,8 @@
 /**
  * @file          roles.queries.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -12,9 +12,22 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
-if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
+if (
+    !isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || 
+    !isset($_SESSION['user_id']) || empty($_SESSION['user_id']) || 
+    !isset($_SESSION['key']) || empty($_SESSION['key'])) 
+{
     die('Hacking attempt...');
+}
+
+/* do checks */
+require_once $_SESSION['settings']['cpassman_dir'].'/sources/checks.php';
+if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_roles")) {
+    $_SESSION['error']['code'] = ERR_NOT_ALLOWED; //not allowed page
+    include $_SESSION['settings']['cpassman_dir'].'/error.php';
+    exit();
 }
 
 include $_SESSION['settings']['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
@@ -25,10 +38,14 @@ include 'main.functions.php';
 require_once $_SESSION['settings']['cpassman_dir'].'/sources/SplClassLoader.php';
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //Build tree
 $tree = new SplClassLoader('Tree\NestedTree', $_SESSION['settings']['cpassman_dir'].'/includes/libraries');
@@ -40,16 +57,18 @@ if (!empty($_POST['type'])) {
         #CASE adding a new role
         case "add_new_role":
             //Check if role already exist : No similar roles
-            $tmp = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."roles_title WHERE title = '".mysql_real_escape_string(stripslashes($_POST['name']))."'");
-            if ($tmp[0] == 0) {
-                $role_id = $db->queryInsert(
-                        'roles_title',
-                        array(
-                                'title' => mysql_real_escape_string(stripslashes($_POST['name'])),
-                                'complexity' => $_POST['complexity'],
-                                'creator_id' => $_SESSION['user_id']
-                        )
+            $tmp = DB::query("SELECT * FROM ".$pre."roles_title WHERE title = %s", stripslashes($_POST['name']));
+            $counter = DB::count();
+            if ($counter == 0) {
+                DB::insert(
+                    $pre.'roles_title',
+                    array(
+                        'title' => stripslashes($_POST['name']),
+                        'complexity' => $_POST['complexity'],
+                        'creator_id' => $_SESSION['user_id']
+                    )
                 );
+                $role_id = DB::insertId();
 
                 if ($role_id != 0) {
                     //Actualize the variable
@@ -59,15 +78,15 @@ if (!empty($_POST['type'])) {
                     echo '[ { "error" : "yes" , "message" : "Database error. Contact your administrator!" } ]';
                 }
             } else {
-                echo '[ { "error" : "yes" , "message" : "'.$txt['error_role_exist'].'" } ]';
+                echo '[ { "error" : "yes" , "message" : "'.$LANG['error_role_exist'].'" } ]';
             }
             break;
 
         //-------------------------------------------
         #CASE delete a role
         case "delete_role":
-            $db->query("DELETE FROM ".$pre."roles_title WHERE id = ".$_POST['id']);
-            $db->query("DELETE FROM ".$pre."roles_values WHERE role_id = ".$_POST['id']);
+            DB::delete($pre."roles_title", "id = %i", $_POST['id']);
+            DB::delete($pre."roles_values", "role_id = %i", $_POST['id']);
             //Actualize the variable
             $_SESSION['nb_roles'] --;
 
@@ -78,19 +97,22 @@ if (!empty($_POST['type'])) {
         #CASE editing a role
         case "edit_role":
             //Check if role already exist : No similar roles
-            $tmp = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."roles_title WHERE id != '".$_POST['id']."' AND title = '".mysql_real_escape_string(stripslashes($_POST['title']))."'");
-            if ($tmp[0] == 0) {
-                $db->queryUpdate(
-                    "roles_title",
+            //$tmp = DB::fetchRow("SELECT COUNT(*) FROM ".$pre."roles_title WHERE id != '".$_POST['id']."' AND title = '".mysqli_escape_string($link, stripslashes($_POST['title']))."'");
+            DB::queryt("SELECT * FROM ".$pre."roles_title WHERE title = %s AND id = %i", $_POST['title'], $_POST['id']);
+            $counter = DB::count();
+            if ($counter == 0) {
+                DB::update(
+                    $pre."roles_title",
                     array(
                         'title' => $_POST['title'],
                         'complexity' => $_POST['complexity']
                    ),
-                    'id = '.$_POST['id']
+                    'id = %i',
+                    $_POST['id']
                 );
                 echo '[ { "error" : "no" } ]';
             } else {
-                echo '[ { "error" : "yes" , "message" : "'.$txt['error_role_exist'].'" } ]';
+                echo '[ { "error" : "yes" , "message" : "'.$LANG['error_role_exist'].'" } ]';
             }
             break;
 
@@ -98,12 +120,13 @@ if (!empty($_POST['type'])) {
         *CASE editing a role
         */
         case "allow_pw_change_for_role":
-            $db->queryUpdate(
-                "roles_title",
+            DB::update(
+                $pre."roles_title",
                 array(
                     'allow_pw_change' => $_POST['value']
                ),
-                'id = '.$_POST['id']
+                'id = %i',
+                $_POST['id']
             );
             break;
 
@@ -117,20 +140,14 @@ if (!empty($_POST['type'])) {
                 //case where folder was allowed but not any more
                 foreach ($tree as $node) {
                     //Store in DB
-                    $db->queryDelete(
-                        'roles_values',
-                        array(
-                            'folder_id' => $node->id,
-                            'role_id' => $_POST['role']
-                       )
-                    );
+                    DB::delete($pre."roles_values", "folder_id = %i AND role_id = %i", $node->id, $_POST['role']);
                 }
             } elseif ($_POST['allowed'] == 0) {
                 //case where folder was not allowed but allowed now
                 foreach ($tree as $node) {
                     //Store in DB
-                    $db->queryInsert(
-                        'roles_values',
+                    DB::insert(
+                        $pre.'roles_values',
                         array(
                             'folder_id' => $node->id,
                             'role_id' => $_POST['role']
@@ -145,25 +162,29 @@ if (!empty($_POST['type'])) {
         case "refresh_roles_matrix":
             //pw complexity levels
             $pwComplexity = array(
-                0=>array(0,$txt['complex_level0']),
-                25=>array(25,$txt['complex_level1']),
-                50=>array(50,$txt['complex_level2']),
-                60=>array(60,$txt['complex_level3']),
-                70=>array(70,$txt['complex_level4']),
-                80=>array(80,$txt['complex_level5']),
-                90=>array(90,$txt['complex_level6'])
+                0=>array(0,$LANG['complex_level0']),
+                25=>array(25,$LANG['complex_level1']),
+                50=>array(50,$LANG['complex_level2']),
+                60=>array(60,$LANG['complex_level3']),
+                70=>array(70,$LANG['complex_level4']),
+                80=>array(80,$LANG['complex_level5']),
+                90=>array(90,$LANG['complex_level6'])
             );
 
             $tree = $tree->getDescendants();
-            $texte = '<table><thead><tr><th>'.$txt['group'].'s</th>';
+            $texte = '<table><thead><tr><th>'.$LANG['group'].'s</th>';
             $gpes_ok = array();
             $gpes_nok = array();
             $tab_fonctions = array();
             $arrRoles = array();
             $display_nb = 8;
+            $sql_limit = "";
+            $next = 1;
+            $previous = 1;
 
             //count nb of roles
-            $roles_count = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."roles_title");
+            DB::query("SELECT * FROM ".$pre."roles_title");
+            $roles_count =  DB::count();
             if ($roles_count > $display_nb) {
                 if (!isset($_POST['start']) || $_POST['start'] == 0) {
                     $start = 0;
@@ -180,27 +201,22 @@ if (!empty($_POST['type'])) {
             $my_functions = explode(';', $_SESSION['fonction_id']);
 
             //Display table header
-            $rows = $db->fetchAllArray(
-                "SELECT *
-                FROM ".$pre."roles_title
-                ORDER BY title ASC".
-                $sql_limit
-            );
-            foreach ($rows as $reccord) {
-                if ($_SESSION['is_admin'] == 1  || ($_SESSION['user_manager'] == 1 && (in_array($reccord['id'], $my_functions) || $reccord['creator_id'] == $_SESSION['user_id']))) {
-                    if ($reccord['allow_pw_change'] == 1) {
-                        $allow_pw_change = '&nbsp;<img id=\'img_apcfr_'.$reccord['id'].'\' src=\'includes/images/ui-text-field-password-green.png\' onclick=\'allow_pw_change_for_role('.$reccord['id'].', 0)\' style=\'cursor:pointer;\' title=\''.$txt['role_cannot_modify_all_seen_items'].'\'>';
+            $rows = DB::query("SELECT * FROM ".$pre."roles_title ORDER BY title ASC".$sql_limit);
+            foreach ($rows as $record) {
+                if ($_SESSION['is_admin'] == 1  || ($_SESSION['user_manager'] == 1 && (in_array($record['id'], $my_functions) || $record['creator_id'] == $_SESSION['user_id']))) {
+                    if ($record['allow_pw_change'] == 1) {
+                        $allow_pw_change = '&nbsp;<img id=\'img_apcfr_'.$record['id'].'\' src=\'includes/images/ui-text-field-password-green.png\' onclick=\'allow_pw_change_for_role('.$record['id'].', 0)\' style=\'cursor:pointer;\' title=\''.$LANG['role_cannot_modify_all_seen_items'].'\'>';
                     } else {
-                        $allow_pw_change = '&nbsp;<img id=\'img_apcfr_'.$reccord['id'].'\' src=\'includes/images/ui-text-field-password-red.png\' onclick=\'allow_pw_change_for_role('.$reccord['id'].', 1)\' style=\'cursor:pointer;\' title=\''.$txt['role_can_modify_all_seen_items'].'\'>';
+                        $allow_pw_change = '&nbsp;<img id=\'img_apcfr_'.$record['id'].'\' src=\'includes/images/ui-text-field-password-red.png\' onclick=\'allow_pw_change_for_role('.$record['id'].', 1)\' style=\'cursor:pointer;\' title=\''.$LANG['role_can_modify_all_seen_items'].'\'>';
                     }
 
-                    $texte .= '<th style=\'font-size:10px;min-width:60px;\' class=\'edit_role\'>'.$reccord['title'].
-                        '<br><img src=\'includes/images/ui-tab--pencil.png\' onclick=\'edit_this_role('.$reccord['id'].',"'.htmlentities($reccord['title'], ENT_QUOTES, "UTF-8").'",'.$reccord['complexity'].')\' style=\'cursor:pointer;\'>&nbsp;'.
-                        '<img src=\'includes/images/ui-tab--minus.png\' style=\'cursor:pointer;\' onclick=\'delete_this_role('.$reccord['id'].',"'.htmlentities($reccord['title'], ENT_QUOTES, "UTF-8").'")\'>'.
+                    $texte .= '<th style=\'font-size:10px;min-width:60px;\' class=\'edit_role\'>'.$record['title'].
+                        '<br><img src=\'includes/images/ui-tab--pencil.png\' onclick=\'edit_this_role('.$record['id'].',"'.htmlentities($record['title'], ENT_QUOTES, "UTF-8").'",'.$record['complexity'].')\' style=\'cursor:pointer;\'>&nbsp;'.
+                        '<img src=\'includes/images/ui-tab--minus.png\' style=\'cursor:pointer;\' onclick=\'delete_this_role('.$record['id'].',"'.htmlentities($record['title'], ENT_QUOTES, "UTF-8").'")\'>'.
                         $allow_pw_change.
-                        '<div style=\'margin-top:-8px;\'>[&nbsp;'.$pwComplexity[$reccord['complexity']][1].'&nbsp;]</div></th>';
+                        '<div style=\'margin-top:-8px;\'>[&nbsp;'.$pwComplexity[$record['complexity']][1].'&nbsp;]</div></th>';
 
-                    array_push($arrRoles, $reccord['id']);
+                    array_push($arrRoles, $record['id']);
                 }
             }
             $texte .= '</tr></thead><tbody>';
@@ -220,8 +236,8 @@ if (!empty($_POST['type'])) {
                     foreach ($arrRoles as $role) {
                         //check if this role has access or not
                         // if not then color is red; if yes then color is green
-                        $count = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."roles_values WHERE folder_id = ".$node->id." AND role_id = ".$role);
-                        if ($count[0] > 0) {
+                        $count = DB::query("SELECT * FROM ".$pre."roles_values WHERE folder_id = %i AND role_id = %i", $node->id, $role);
+                        if (DB::count() > 0) {
                             $couleur = '#008000';
                             $allowed = 1;
                         } else {
@@ -245,7 +261,7 @@ if (!empty($_POST['type'])) {
 
             //Check if is UTF8. IF not send Error
             /*if (!isUTF8($texte)) {
-                $return_values = array("error" => $txt['error_string_not_utf8']);
+                $return_values = array("error" => $LANG['error_string_not_utf8']);
             }*/
 
             $return_values = json_encode($return_values, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP);
@@ -258,12 +274,13 @@ if (!empty($_POST['type'])) {
 } elseif (!empty($_POST['edit_fonction'])) {
     $id = explode('_', $_POST['id']);
     //Update DB
-    $db->queryUpdate(
-        'roles_title',
+    DB::update(
+        $pre.'roles_title',
         array(
-            'title' => mysql_real_escape_string(stripslashes(utf8_decode($_POST['edit_fonction'])))
+            'title' => mysqli_escape_string($link, stripslashes(utf8_decode($_POST['edit_fonction'])))
        ),
-        "id = ".$id[1]
+        "id = %i",
+        $id[1]
     );
     //Show value
     echo $_POST['edit_fonction'];

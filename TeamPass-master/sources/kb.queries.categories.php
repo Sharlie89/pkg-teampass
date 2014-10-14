@@ -2,8 +2,8 @@
 /**
  * @file          kb.queries.categories.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -12,6 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
     die('Hacking attempt...');
@@ -23,29 +24,35 @@ require_once $_SESSION['settings']['cpassman_dir'].'/sources/SplClassLoader.php'
 header("Content-type: text/x-json; charset=".$k['charset']);
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
-
-$sql = "SELECT id, category FROM ".$pre."kb_categories";
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //manage filtering
-if (!empty($_GET['term'])) {
-    $sql .= " WHERE category LIKE '%".$_GET['term']."%'";
-}
-
-$sql .= " ORDER BY category ASC";
-
 $sOutput = '';
+if (!empty($_GET['term'])) {
+    $rows = DB::query(
+        "SELECT id, category FROM ".$pre."kb_categories
+        WHERE category LIKE %ss
+        ORDER BY category ASC",
+        $_GET['term']
+    );
+} else {
+    $rows = DB::query("SELECT id, category FROM ".$pre."kb_categories ORDER BY category ASC");
+}
+$counter = DB::count();
 
-$rows = $db->fetchAllArray($sql);
-if (count($rows)>0) {
-    foreach ($rows as $reccord) {
+if ($counter>0) {
+    foreach ($rows as $record) {
         if (empty($sOutput)) {
-            $sOutput = '"'.$reccord['category'].'"';
+            $sOutput = '"'.$record['category'].'"';
         } else {
-            $sOutput .= ', "'.$reccord['category'].'"';
+            $sOutput .= ', "'.$record['category'].'"';
         }
     }
 

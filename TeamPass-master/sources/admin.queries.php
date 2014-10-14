@@ -3,8 +3,8 @@
 /**
  * @file          admin.queries.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link    	  http://www.teampass.net
  *
@@ -13,25 +13,42 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
-if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
+if (
+    !isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 ||
+    !isset($_SESSION['user_id']) || empty($_SESSION['user_id']) ||
+    !isset($_SESSION['key']) || empty($_SESSION['key']))
+{
     die('Hacking attempt...');
+}
+
+/* do checks */
+require_once $_SESSION['settings']['cpassman_dir'].'/sources/checks.php';
+if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_settings")) {
+    $_SESSION['error']['code'] = ERR_NOT_ALLOWED; //not allowed page
+    include $_SESSION['settings']['cpassman_dir'].'/error.php';
+    exit();
 }
 
 include $_SESSION['settings']['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
 include $_SESSION['settings']['cpassman_dir'].'/includes/settings.php';
 include $_SESSION['settings']['cpassman_dir'].'/includes/include.php';
 header("Content-type: text/html; charset=utf-8");
-header("Cache-Control: no-cache, must-revalidate");
+header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 
 require_once $_SESSION['settings']['cpassman_dir'].'/sources/SplClassLoader.php';
 
 // connect to the server
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //Load Tree
 $tree = new SplClassLoader('Tree\NestedTree', '../includes/libraries');
@@ -79,11 +96,11 @@ switch ($_POST['type']) {
                             $tab = explode('|', $val);
                             foreach ($tab as $elem) {
                                 $tmp = explode('#', $elem);
-                                $text .= '<li><u>'.$txt[$tmp[0]]."</u> : ".$tmp[1].'</li>';
+                                $text .= '<li><u>'.$LANG[$tmp[0]]."</u> : ".$tmp[1].'</li>';
                                 if ($tmp[0] == "version") {
-                                    $text .= '<li><u>'.$txt['your_version']."</u> : ".$k['version'];
+                                    $text .= '<li><u>'.$LANG['your_version']."</u> : ".$k['version'];
                                     if (floatval($k['version']) < floatval($tmp[1])) {
-                                        $text .= '&nbsp;&nbsp;<b>'.$txt['please_update'].'</b><br />';
+                                        $text .= '&nbsp;&nbsp;<b>'.$LANG['please_update'].'</b><br />';
                                     }
                                     $text .= '</li>';
                                 }
@@ -105,23 +122,25 @@ switch ($_POST['type']) {
     #CASE for refreshing all Personal Folders
     case "admin_action_check_pf":
         //get through all users
-        $rows = $db->fetchAllArray("SELECT id,login,email FROM ".$pre."users ORDER BY login ASC");
+        $rows = DB::query("SELECT id,login,email FROM ".$pre."users ORDER BY login ASC");
         foreach ($rows as $record) {
             //update PF field for user
-            $db->queryUpdate(
-                'users',
+            DB::update(
+                $pre.'users',
                 array(
                     'personal_folder' => '1'
                ),
-                "id='".$record['id']."'"
+                "id = %i",
+                $record['id']
             );
 
             //if folder doesn't exist then create it
-            $data = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."nested_tree WHERE title = '".$record['id']."' AND parent_id = 0");
-            if ($data[0] == 0) {
+            $data = DB::queryfirstrow("SELECT * FROM ".$pre."nested_tree WHERE title = %s AND parent_id = %i", $record['id'], 0);
+            $counter = DB::count();
+            if ($counter == 0) {
                 //If not exist then add it
-                $db->queryInsert(
-                    "nested_tree",
+                DB::insert(
+                    $pre."nested_tree",
                     array(
                         'parent_id' => '0',
                         'title' => $record['id'],
@@ -130,25 +149,22 @@ switch ($_POST['type']) {
                 );
             } else {
                 //If exists then update it
-                $db->queryUpdate(
-                    'nested_tree',
+                DB::update(
+                    $pre.'nested_tree',
                     array(
                         'personal_folder' => '1'
                    ),
-                    array(
-                        "title" =>$record['id'],
-                        'parent_id' => '0'
-                   )
+                   "title=%s AND parent_id=%i", $record['id'], 0
                 );
             }
         }
 
-        //Delete PF for deleted users
-        $db->query(
+        //Delete PF for deleted users - TODO
+        /*DB::query(
             "SELECT COUNT(*) FROM ".$pre."nested_tree as t
             LEFT JOIN ".$pre."users as u ON t.title = u.id
             WHERE u.id IS null AND t.parent_id=0 AND t.title REGEXP '^[0-9]'"
-        );
+        );*/
 
         //rebuild fuild tree folder
         $tree->rebuild();
@@ -174,30 +190,35 @@ switch ($_POST['type']) {
                 array_push($foldersIds, $folder->id);
             }
         }
-
-        $items = $db->fetchAllArray("SELECT id,label FROM ".$pre."items WHERE id_tree NOT IN(".implode(',', $foldersIds).")");
+        
+        $items = DB::query("SELECT id,label FROM ".$pre."items WHERE id_tree NOT IN %li", $foldersIds);
         foreach ($items as $item) {
             $text .= $item['label']."[".$item['id']."] - ";
             //Delete item
-            $db->query("DELETE FROM ".$pre."items WHERE id = ".$item['id']);
+            DB::DELETE($pre."items", "id = %i", $item['id']);
             //log
-            $db->query("DELETE FROM ".$pre."log_items WHERE id_item = ".$item['id']);
+            DB::DELETE($pre."log_items", "id_item = %i", $item['id']);
 
             $nbItemsDeleted++;
         }
 
         // delete orphan items
-        $rows = $db->fetchAllArray(
+        $rows = DB::query(
             "SELECT id
             FROM ".$pre."items
             ORDER BY id ASC"
         );
         foreach ($rows as $item) {
-            $row = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."log_items WHERE id_item=".$item['id']." AND action = 'at_creation'");
-            if ($row[0] == 0) {
-                $db->query("DELETE FROM ".$pre."items WHERE id = ".$item['id']);
-                $db->query("DELETE FROM ".$pre."categories_items WHERE item_id = ".$item['id']);
-                $db->query("DELETE FROM ".$pre."log_items WHERE id_item = ".$item['id']);
+            DB::query(
+                "SELECT * FROM ".$pre."log_items WHERE id_item = %i AND action = %s",
+                $item['id'],
+                "at_creation"
+            );
+            $counter = DB::count();
+            if ($counter == 0) {
+                DB::DELETE($pre."items", "id = %i", $item['id']);
+                DB::DELETE($pre."categories_items", "item_id = %i", $item['id']);
+                DB::DELETE($pre."log_items", "id_item = %i", $item['id']);
                 $nbItemsDeleted++;
             }
         }
@@ -216,30 +237,34 @@ switch ($_POST['type']) {
         $return = "";
 
         //Get all tables
-        /*$tables = array();
-        $result = mysql_query('SHOW TABLES');
-        while ($row = mysql_fetch_row($result)) {
-            $tables[] = $row[0];
-        }*/
         $tables = array();
-        $result = $db->query('SHOW TABLES');
-        while ($row = $db->fetchArray($result)) {
+        $result = DB::query('SHOW TABLES');
+        foreach ($result as $row) {
             $tables[] = $row["Tables_in_".$database];
         }
 
         //cycle through
         foreach ($tables as $table) {
             if (empty($pre) || substr_count($table, $pre) > 0) {
-                $result = $db->query('SELECT * FROM '.$table);
-                $numFields = $db->queryNumFields('SELECT * FROM '.$table);
-                // prepare a drop table
+                $result = DB::queryRaw('SELECT * FROM '.$table);
+                $mysqli_result = DB::queryRaw(
+                    "SELECT COUNT(*) AS Columns
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE table_schema = %s
+                    AND table_name = %s",
+                    $database,
+                    $table
+                );
+                $row = $mysqli_result->fetch_row();
+                $numFields = $row[0];
+                    // prepare a drop table
                 $return.= 'DROP TABLE '.$table.';';
-                $row2 = $db->queryFirst('SHOW CREATE TABLE '.$table);
+                $row2 = DB::queryfirstrow('SHOW CREATE TABLE '.$table);
                 $return.= "\n\n".$row2["Create Table"].";\n\n";
 
                 //prepare all fields and datas
                 for ($i = 0; $i < $numFields; $i++) {
-                    while ($row = mysql_fetch_row($result)) {
+                    while ($row = $result->fetch_row()) {
                         $return.= 'INSERT INTO '.$table.' VALUES(';
                         for ($j=0; $j<$numFields; $j++) {
                             $row[$j] = addslashes($row[$j]);
@@ -286,8 +311,8 @@ switch ($_POST['type']) {
             $_SESSION['key_tmp'] = $pwgen->generate();
 
             //update LOG
-            $db->queryInsert(
-                'log_system',
+            DB::insert(
+                $pre.'log_system',
                 array(
                     'type' => 'admin_action',
                     'date' => time(),
@@ -333,7 +358,7 @@ switch ($_POST['type']) {
                 $query.= fgets($handle, 4096);
                 if (substr(rtrim($query), -1) == ';') {
                     //launch query
-                    $db->query($query);
+                    DB::query($query);
                     $query = '';
                 }
             }
@@ -351,30 +376,39 @@ switch ($_POST['type']) {
     #CASE for optimizing the DB
     case "admin_action_db_optimize":
         //Get all tables
-        $alltables = mysql_query("SHOW TABLES");
-        while ($table = mysql_fetch_assoc($alltables)) {
+        $alltables = DB::query("SHOW TABLES");
+        foreach ($alltables as $table) {
             foreach ($table as $i => $tablename) {
                 if (substr_count($tablename, $pre) > 0) {
                     // launch optimization quieries
-                    mysql_query("ANALYZE TABLE `".$tablename."`");
-                    mysql_query("OPTIMIZE TABLE `".$tablename."`");
+                    DB::query("ANALYZE TABLE `".$tablename."`");
+                    DB::query("OPTIMIZE TABLE `".$tablename."`");
                 }
             }
         }
 
         //Clean up LOG_ITEMS table
-        $rows = $db->fetchAllArray(
+        $rows = DB::query(
             "SELECT id
             FROM ".$pre."items
             ORDER BY id ASC"
         );
         foreach ($rows as $item) {
-            $row = $db->fetchRow("SELECT COUNT(*) FROM ".$pre."log_items WHERE id_item=".$item['id']." AND action = 'at_creation'");
-            if ($row[0] == 0) {
+            //$row = DB::fetchRow("SELECT COUNT(*) FROM ".$pre."log_items WHERE id_item=".$item['id']." AND action = 'at_creation'");
+            DB::query(
+                "SELECT * FROM ".$pre."log_items WHERE id_item = %i AND action = %s",
+                $item['id'],
+                "at_creation"
+            );
+            $counter = DB::count();
+            if ($counter == 0) {
                 //Create new at_creation entry
-                $rowTmp = $db->queryFirst("SELECT date FROM ".$pre."log_items WHERE id_item=".$item['id']." ORDER BY date ASC");
-                $db->queryInsert(
-                    'log_items',
+                $rowTmp = DB::queryFirstRow(
+                    "SELECT date FROM ".$pre."log_items WHERE id_item=%i ORDER BY date ASC",
+                    $item['id']
+                );
+                DB::insert(
+                    $pre.'log_items',
                     array(
                         'id_item'     => $item['id'],
                         'date'         => $rowTmp['date']-1,
@@ -426,9 +460,9 @@ switch ($_POST['type']) {
     */
     case "admin_action_backup_decrypt":
         //get backups infos
-        $rows = $db->fetchAllArray("SELECT * FROM ".$pre."misc WHERE type = 'settings'");
-        foreach ($rows as $reccord) {
-            $settings[$reccord['intitule']] = $reccord['valeur'];
+        $rows = DB::query("SELECT * FROM ".$pre."misc WHERE type = %s", "settings");
+        foreach ($rows as $record) {
+            $settings[$record['intitule']] = $record['valeur'];
         }
 
         //read file
@@ -456,16 +490,17 @@ switch ($_POST['type']) {
         $error = "";
         include 'main.functions.php';
         //put tool in maintenance.
-            $db->queryUpdate(
-                "misc",
+            DB::update(
+                $pre."misc",
                 array(
                     'valeur' => '1',
                ),
-                "intitule = 'maintenance_mode' AND type= 'admin'"
+                "intitule = %s AND type= %s",
+                "maintenance_mode", "admin"
             );
             //log
-            $db->queryInsert(
-                "log_system",
+            DB::insert(
+                $pre."log_system",
                 array(
                     'type' => 'system',
                     'date' => time(),
@@ -477,29 +512,31 @@ switch ($_POST['type']) {
         $new_salt_key = htmlspecialchars_decode(Encryption\Crypt\aesctr::decrypt($_POST['option'], SALT, 256));
 
         //change all passwords in DB
-        $rows = $db->fetchAllArray("SELECT id,pw FROM ".$pre."items WHERE perso = '0'");
-        foreach ($rows as $reccord) {
-            $pw = decrypt($reccord['pw']);
+        $rows = DB::query("SELECT id,pw FROM ".$pre."items WHERE perso = %s", "0");
+        foreach ($rows as $record) {
+            $pw = decrypt($record['pw']);
             //encrypt with new SALT
-            $db->queryUpdate(
-                "items",
+            DB::update(
+                $pre."items",
                 array(
                     'pw' => encrypt($pw, $new_salt_key),
                ),
-                "id = '".$reccord['id']."'"
+                "id = %i",
+                $record['id']
             );
         }
         //change all users password in DB
-        $rows = $db->fetchAllArray("SELECT id,pw FROM ".$pre."users");
-        foreach ($rows as $reccord) {
-            $pw = decrypt($reccord['pw']);
+        $rows = DB::query("SELECT id,pw FROM ".$pre."users");
+        foreach ($rows as $record) {
+            $pw = decrypt($record['pw']);
             //encrypt with new SALT
-            $db->queryUpdate(
-                "users",
+            DB::update(
+                $pre."users",
                 array(
                     'pw' => encrypt($pw, $new_salt_key),
                ),
-                "id = '".$reccord['id']."'"
+                "id = %i",
+                $record['id']
             );
         }
 
@@ -537,7 +574,7 @@ switch ($_POST['type']) {
     */
     case "admin_email_test_configuration":
         require_once $_SESSION['settings']['cpassman_dir'].'/sources/main.functions.php';
-        echo '[{"result":"email_test_conf", '.sendEmail($txt['admin_email_test_subject'], $txt['admin_email_test_body'], $_SESSION['user_email']).'}]';
+        echo '[{"result":"email_test_conf", '.sendEmail($LANG['admin_email_test_subject'], $LANG['admin_email_test_body'], $_SESSION['user_email']).'}]';
         break;
 
     /*
@@ -546,35 +583,36 @@ switch ($_POST['type']) {
     case "admin_email_send_backlog":
         require_once $_SESSION['settings']['cpassman_dir'].'/sources/main.functions.php';
 
-        $rows = $db->fetchAllArray("SELECT * FROM ".$pre."emails WHERE status = 'not_sent' OR status = ''");
-        foreach ($rows as $reccord) {
+        $rows = DB::query("SELECT * FROM ".$pre."emails WHERE status = %s OR status = %s", "not_sent", "");
+        foreach ($rows as $record) {
             //send email
             $ret = json_decode(
                 @sendEmail(
-                    $reccord['subject'],
-                    $reccord['body'],
-                    $reccord['receivers']
+                    $record['subject'],
+                    $record['body'],
+                    $record['receivers']
                 )
             );
 
             if (!empty($ret['error'])) {
                 //update item_id in files table
-                $db->queryUpdate(
-                    'emails',
+                DB::update(
+                    $pre.'emails',
                     array(
                         'status' => "not sent"
                    ),
-                    "timestamp='".$reccord['timestamp']."'"
+                    "timestamp = %s",
+                    $record['timestamp']
                 );
             } else {
                 //delete from DB
-                $db->query("DELETE FROM ".$pre."emails WHERE timestamp = '".$reccord['timestamp']."'");
+                DB::delete($pre."emails", "timestamp = %s", $record['timestamp']);
             }
         }
 
         //update LOG
-        $db->queryInsert(
-            'log_system',
+        DB::insert(
+            $pre.'log_system',
             array(
                'type' => 'admin_action',
                'date' => time(),
@@ -583,7 +621,7 @@ switch ($_POST['type']) {
             )
         );
 
-        echo '[{"result":"admin_email_send_backlog", '.@sendEmail($txt['admin_email_test_subject'], $txt['admin_email_test_body'], $_SESSION['settings']['email_from']).'}]';
+        echo '[{"result":"admin_email_send_backlog", '.@sendEmail($LANG['admin_email_test_subject'], $LANG['admin_email_test_body'], $_SESSION['settings']['email_from']).'}]';
         break;
 
     /*
@@ -615,14 +653,15 @@ switch ($_POST['type']) {
         include 'main.functions.php';
         $numOfItemsChanged = 0;
         // go for all Items and get their PW
-        $rows = $db->fetchAllArray("SELECT id, pw FROM ".$pre."items WHERE perso = '0'");
-        foreach ($rows as $reccord) {
+        $rows = DB::query("SELECT id, pw FROM ".$pre."items WHERE perso = %s", "0");
+        foreach ($rows as $record) {
             // check if key exists for this item
-            $row = @$db->fetchRow("SELECT COUNT(*) FROM ".$pre."keys WHERE `id`='".$reccord['id']."' AND `table` = 'items'");
-            if ($row[0] == 0) {
+            DB::query("SELECT * FROM ".$pre."keys WHERE `id` = %i AND `table` = %s", $record['id'], "items");
+            $counter = DB::count();
+            if ($counter == 0) {
                 $storePrefix = false;
                 // decrypt pw
-                $pw = decrypt($reccord['pw']);
+                $pw = decrypt($record['pw']);
                 if (!empty($pw) && strlen($pw) > 15 && isutf8($pw)) {
                     // Pw seems to have a prefix
                     // get old prefix
@@ -640,23 +679,24 @@ switch ($_POST['type']) {
                     $pw = encrypt($pw);
 
                     // store pw
-                    $db->queryUpdate(
-                        'items',
+                    DB::update(
+                        $pre.'items',
                         array(
                             'pw' => $pw
                         ),
-                        "id='".$reccord['id']."'"
+                        "id=%s",
+                        $record['id']
                     );
                     // should we store?
                     $storePrefix = true;
                 }
                 if ($storePrefix == true) {
                     // store key prefix
-                    $db->queryInsert(
-                        'keys',
+                    DB::insert(
+                        $pre.'keys',
                         array(
                             'table'     => 'items',
-                            'id'        => $reccord['id'],
+                            'id'        => $record['id'],
                             'rand_key'  => $randomKey
                         )
                     );
@@ -665,6 +705,259 @@ switch ($_POST['type']) {
                 $numOfItemsChanged++;
             }
         }
-        echo '[{"result":"pw_prefix_correct", "error":"", "ret":"'.$txt['alert_message_done'].' '.$numOfItemsChanged.' '.$txt['items_changed'].'"}]';
+        echo '[{"result":"pw_prefix_correct", "error":"", "ret":"'.$LANG['alert_message_done'].' '.$numOfItemsChanged.' '.$LANG['items_changed'].'"}]';
         break;
+
+    /*
+    * Attachments encryption
+    */
+    case "admin_action_attachments_cryption":
+        require_once $_SESSION['settings']['cpassman_dir'].'/sources/main.functions.php';
+
+        // init
+        $error = "";
+        $ret = "";
+        $cpt = 0;
+        $checkCoherancy = false;
+        $filesList = "";
+        $continu = true;
+
+        // get through files
+        if (isset($_POST['option']) && !empty($_POST['option'])) {
+            if ($handle = opendir($_SESSION['settings']['path_to_upload_folder'].'/')) {
+                while (false !== ($entry = readdir($handle))) {
+                    $entry = basename($entry);
+                    if ($entry != "." && $entry != ".." && $entry != ".htaccess" && $entry != ".gitignore") {
+                        if (strpos($entry, ".") == false) {
+                            // check if user query is coherant
+                            if ($checkCoherancy == false) {
+                                $fp = fopen($_SESSION['settings']['path_to_upload_folder'].'/'.$entry, "rb");
+                                $line = fgets($fp);
+
+                                // check if isUTF8. If yes, then check if process = encryption, and vice-versa
+                                if (isUTF8($line) && $_POST['option'] == "decrypt") {
+                                    $error = "file_not_encrypted";
+                                    $continu = false;
+                                    break;
+                                } elseif (!isUTF8($line) && $_POST['option'] == "encrypt") {
+                                    $error = "file_not_clear";
+                                    $continu = false;
+                                    break;
+                                }
+                                fclose($fp);
+                                $checkCoherancy = true;
+
+                                // check if to stop
+                                if (!empty($error)) {
+                                    break;
+                                }
+                            }
+
+                            // build list
+                            if (empty($filesList)) {
+                                $filesList = $entry;
+                            } else {
+                                $filesList .= ";".$entry;
+                            }
+                        }
+                    }
+                }
+                closedir($handle);
+            }
+        } else {
+            $error = "No option";
+        }
+
+        echo '[{"result":"attachments_cryption", "error":"'.$error.'", "continu":"'.$continu.'", "list":"'.$filesList.'", "cpt":"0"}]';
+        break;
+
+        /*
+         * Attachments encryption - Treatment in several loops
+         */
+        case "admin_action_attachments_cryption_continu":
+            include $_SESSION['settings']['cpassman_dir'].'/includes/settings.php';
+            require_once $_SESSION['settings']['cpassman_dir'].'/sources/main.functions.php';
+
+            $cpt = 0;
+            $newFilesList = "";
+            $continu = true;
+            $error = "";
+
+            // Prepare encryption options
+            $iv = substr(md5("\x1B\x3C\x58".SALT, true), 0, 8);
+            $key = substr(
+                md5("\x2D\xFC\xD8".SALT, true).
+                md5("\x2D\xFC\xD9".SALT, true),
+                0,
+                24
+            );
+            $opts = array('iv'=>$iv, 'key'=>$key);
+
+            // treat 10 files
+            $filesList = explode(';', $_POST['list']);
+            foreach ($filesList as $file) {
+                if ($cpt < 5) {
+                    // skip file is Coherancey not respected
+                    $fp = fopen($_SESSION['settings']['path_to_upload_folder'].'/'.$file, "rb");
+                    $line = fgets($fp);
+                    $skipFile = false;
+                    // check if isUTF8. If yes, then check if process = encryption, and vice-versa
+                    if (!isUTF8($line) && $_POST['option'] == "decrypt") {
+                        $skipFile = true;
+                    } elseif (!isUTF8($line) && $_POST['option'] == "encrypt") {
+                        $skipFile = true;
+                    }
+                    fclose($fp);
+
+                    if ($skipFile == true) {
+                        // make a copy of file
+                        if (!copy(
+                                $_SESSION['settings']['path_to_upload_folder'].'/'.$file,
+                                $_SESSION['settings']['path_to_upload_folder'].'/'.$file.".copy"
+                        )) {
+                            $error = "Copy not possible";
+                            exit;
+                        }
+
+                        // Open the file
+                        unlink($_SESSION['settings']['path_to_upload_folder'].'/'.$file);
+                        $fp = fopen($_SESSION['settings']['path_to_upload_folder'].'/'.$file.".copy", "rb");
+                        $out = fopen($_SESSION['settings']['path_to_upload_folder'].'/'.$file, 'wb');
+
+                        if ($_POST['option'] == "decrypt") {
+                            stream_filter_append($fp, 'mdecrypt.tripledes', STREAM_FILTER_READ, $opts);
+                        } else if ($_POST['option'] == "encrypt") {
+                            stream_filter_append($out, 'mcrypt.tripledes', STREAM_FILTER_WRITE, $opts);
+                        }
+
+                        // read file and create new one
+                        $check = false;
+                        while (($line = fgets($fp)) !== false) {
+                            fputs($out, $line);
+                        }
+                        fclose($fp);
+                        fclose($out);
+
+                        $cpt ++;
+                    }
+                } else {
+                    // build list
+                    if (empty($newFilesList)) {
+                        $newFilesList = $file;
+                    } else {
+                        $newFilesList .= ";".$file;
+                    }
+                }
+            }
+
+            if (empty($newFilesList)) $continu = false;
+
+            echo '[{"error":"'.$error.'", "continu":"'.$continu.'", "list":"'.$newFilesList.'", "cpt":"'.($_POST['cpt']+$cpt).'"}]';
+            break;
+
+        /*
+         * API save key
+         */
+        case "admin_action_api_save_key":
+            $error = "";
+            // add new key
+            if (isset($_POST['action']) && $_POST['action'] == "add") {
+                DB::insert(
+                    $pre.'api',
+                    array(
+                    	'id'		=> null,
+                        'type'      => 'key',
+                        'label'     => $_POST['label'],
+                        'value'       => $_POST['key'],
+                        'timestamp' => time()
+                    )
+                );
+            }
+            else
+            // update existing key
+            if (isset($_POST['action']) && $_POST['action'] == "update") {
+                DB::update(
+                    $pre.'api',
+                    array(
+                        'label'     => $_POST['label'],
+                        'timestamp' => time()
+                    ),
+                    "id=%i",
+                    $_POST['id']
+                );
+            }
+            else
+            // delete existing key
+            if (isset($_POST['action']) && $_POST['action'] == "delete") {
+				DB::query("DELETE FROM ".$pre."api WHERE id = %i", $_POST['id']);
+            }
+            echo '[{"error":"'.$error.'"}]';
+            break;
+
+	/*
+	   * API save key
+	*/
+	case "admin_action_api_save_ip":
+		$error = "";
+		// add new key
+		if (isset($_POST['action']) && $_POST['action'] == "add") {
+			DB::insert(
+                $pre.'api',
+                array(
+                    'id'		=> null,
+                    'type'      => 'ip',
+                    'label'     => $_POST['label'],
+                    'value'       => $_POST['key'],
+                    'timestamp' => time()
+                )
+			);
+		}
+		else
+			// update existing key
+			if (isset($_POST['action']) && $_POST['action'] == "update") {
+				DB::update(
+                    $pre.'api',
+                    array(
+                        'label'     => $_POST['label'],
+                        'value'     => $_POST['key'],
+                        'timestamp' => time()
+                    ),
+                    "id=%i",
+                    $_POST['id']
+				);
+			}
+		else
+			// delete existing key
+			if (isset($_POST['action']) && $_POST['action'] == "delete") {
+				DB::query("DELETE FROM ".$pre."api WHERE id=%i", $_POST['id']);
+			}
+		echo '[{"error":"'.$error.'"}]';
+		break;
+
+	case "save_api_status":
+		DB::query("SELECT * FROM ".$pre."misc WHERE type = %s AND intitule = %s", "admin", "api");
+        $counter = DB::count();
+		if ($counter == 0) {
+			DB::insert(
+				$pre."misc",
+				array(
+					'type' => "admin",
+					"intitule" => "api",
+				    'valeur' => intval($_POST['status'])
+				   )
+			);
+		} else {
+			DB::update(
+				$pre."misc",
+				array(
+				    'valeur' => intval($_POST['status'])
+				   ),
+				"type = %s AND intitule = %s",
+                "admin",
+                "api"
+			);
+		}
+		$_SESSION['settings']['api'] = intval($_POST['status']);
+		break;
+
 }

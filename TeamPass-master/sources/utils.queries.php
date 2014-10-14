@@ -2,8 +2,8 @@
 /**
  * @file          utils.queries.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -12,6 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
     die('Hacking attempt...');
@@ -24,10 +25,14 @@ header("Content-type: text/html; charset=utf-8");
 include 'main.functions.php';
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 // Construction de la requ?te en fonction du type de valeur
 switch ($_POST['type']) {
@@ -46,7 +51,7 @@ switch ($_POST['type']) {
 
         foreach (explode(';', $_POST['ids']) as $id) {
             if (!in_array($id, $_SESSION['forbiden_pfs']) && in_array($id, $_SESSION['groupes_visibles'])) {
-                $rows = $db->fetchAllArray(
+                $rows =DB::query(
                     "SELECT i.id as id, i.restricted_to as restricted_to, i.perso as perso, i.label as label, i.description as description, i.pw as pw, i.login as login,
                     l.date as date,
                     n.renewal_period as renewal_period,
@@ -55,46 +60,51 @@ switch ($_POST['type']) {
                     INNER JOIN ".$pre."nested_tree as n ON (i.id_tree = n.id)
                     INNER JOIN ".$pre."log_items as l ON (i.id = l.id_item)
                     INNER JOIN ".$pre."keys as k ON (i.id = k.id)
-                    WHERE i.inactif = 0
-                    AND i.id_tree=".$id."
-                    AND (l.action = 'at_creation' OR (l.action = 'at_modification' AND l.raison LIKE 'at_pw :%'))
-                    ORDER BY i.label ASC, l.date DESC"
+                    WHERE i.inactif = %i
+                    AND i.id_tree= %i
+                    AND (l.action = %s OR (l.action = %s AND l.raison LIKE %ss))
+                    ORDER BY i.label ASC, l.date DESC",
+                    0,
+                    $id,
+                    "at_creation",
+                    "at_modification",
+                    "at_pw :"
                 );
 
                 $id_managed = '';
                 $i = 1;
                 $items_id_list = array();
-                foreach ($rows as $reccord) {
-                    $restricted_users_array = explode(';', $reccord['restricted_to']);
+                foreach ($rows as $record) {
+                    $restricted_users_array = explode(';', $record['restricted_to']);
                     //exclude all results except the first one returned by query
-                    if (empty($id_managed) || $id_managed != $reccord['id']) {
+                    if (empty($id_managed) || $id_managed != $record['id']) {
                         if (
-                        (in_array($id, $_SESSION['personal_visible_groups']) && !($reccord['perso'] == 1 && $_SESSION['user_id'] == $reccord['restricted_to']) && !empty($reccord['restricted_to']))
+                        (in_array($id, $_SESSION['personal_visible_groups']) && !($record['perso'] == 1 && $_SESSION['user_id'] == $record['restricted_to']) && !empty($record['restricted_to']))
                         ||
-                        (!empty($reccord['restricted_to']) && !in_array($_SESSION['user_id'], $restricted_users_array))
+                        (!empty($record['restricted_to']) && !in_array($_SESSION['user_id'], $restricted_users_array))
                     ) {
                             //exclude this case
                         } else {
                             //encrypt PW
                             if (!empty($_POST['salt_key']) && isset($_POST['salt_key'])) {
-                                $pw = decrypt($reccord['pw'], mysql_real_escape_string(stripslashes($_POST['salt_key'])));
+                                $pw = decrypt($reccord['pw'], mysqli_escape_string($link, stripslashes($_POST['salt_key'])));
                             } else {
-                                $pw = decrypt($reccord['pw']);
+                                $pw = decrypt($record['pw']);
                             }
 
                             $full_listing[$i] = array(
-                                'id' => $reccord['id'],
-                                'label' => $reccord['label'],
-                                'description' => htmlentities(str_replace(";", ".", $reccord['description']), ENT_QUOTES, "UTF-8"),
-                                'pw' => substr(addslashes($pw), strlen($reccord['rand_key'])),
-                                'login' => $reccord['login'],
-                                'restricted_to' => $reccord['restricted_to'],
-                                'perso' => $reccord['perso']
+                                'id' => $record['id'],
+                                'label' => $record['label'],
+                                'description' => htmlentities(str_replace(";", ".", $record['description']), ENT_QUOTES, "UTF-8"),
+                                'pw' => substr(addslashes($pw), strlen($record['rand_key'])),
+                                'login' => $record['login'],
+                                'restricted_to' => $record['restricted_to'],
+                                'perso' => $record['perso']
                             );
                         }
                         $i++;
                     }
-                    $id_managed = $reccord['id'];
+                    $id_managed = $record['id'];
                 }
             }
             //save the file
