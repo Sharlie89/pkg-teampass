@@ -2,8 +2,8 @@
 /**
  * @file          datatable.item_edition.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -11,6 +11,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
+require_once('../sessions.php');
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1) {
     die('Hacking attempt...');
@@ -23,13 +24,18 @@ include $_SESSION['settings']['cpassman_dir'].'/includes/settings.php';
 header("Content-type: text/html; charset=utf-8");
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //Columns name
 $aColumns = array('e.timestamp', 'u.login', 'i.label', 'u.name', 'u.lastname');
+$aSortTypes = array('ASC', 'DESC');
 
 //init SQL variables
 $sOrder = $sLimit = $sWhere = "";
@@ -38,19 +44,22 @@ $sOrder = $sLimit = $sWhere = "";
 //Paging
 $sLimit = "";
 if (isset($_GET['iDisplayStart']) && $_GET['iDisplayLength'] != '-1') {
-    $sLimit = "LIMIT ". $_GET['iDisplayStart'] .", ". $_GET['iDisplayLength'] ;
+    $sLimit = "LIMIT ". filter_var($_GET['iDisplayStart'], FILTER_SANITIZE_NUMBER_INT) .", ". filter_var($_GET['iDisplayLength'], FILTER_SANITIZE_NUMBER_INT)."";
 }
 
 //Ordering
 
-if (isset($_GET['iSortCol_0'])) {
+if (isset($_GET['iSortCol_0']) && in_array($_GET['iSortCol_0'], $aSortTypes)) {
     $sOrder = "ORDER BY  ";
-    for ($i=0; $i<intval($_GET['iSortingCols']); $i++) {
-        if ($_GET[ 'bSortable_'.intval($_GET['iSortCol_'.$i]) ] == "true") {
-            $sOrder .= $aColumns[ intval($_GET['iSortCol_'.$i]) ]."
-            ".mysql_real_escape_string($_GET['sSortDir_'.$i]) .", ";
-        }
-    }
+	for ($i=0; $i<intval($_GET['iSortingCols']); $i++) {
+		if (
+			$_GET[ 'bSortable_'.filter_var($_GET['iSortCol_'.$i], FILTER_SANITIZE_NUMBER_INT)] == "true" &&
+			preg_match("#^(asc|desc)\$#i", $_GET['sSortDir_'.$i])
+		) {
+			$sOrder .= "".$aColumns[ filter_var($_GET['iSortCol_'.$i], FILTER_SANITIZE_NUMBER_INT) ]." "
+			.mysqli_escape_string($link, $_GET['sSortDir_'.$i]) .", ";
+		}
+	}
 
     $sOrder = substr_replace($sOrder, "", -2);
     if ($sOrder == "ORDER BY") {
@@ -67,37 +76,32 @@ if (isset($_GET['iSortCol_0'])) {
 if ($_GET['sSearch'] != "") {
     $sWhere = " WHERE (";
     for ($i=0; $i<count($aColumns); $i++) {
-        $sWhere .= $aColumns[$i]." LIKE '%".mysql_real_escape_string($_GET['sSearch'])."%' OR ";
+        $sWhere .= $aColumns[$i]." LIKE %ss_".$aColumns[$i]." OR ";
     }
     $sWhere = substr_replace($sWhere, "", -3).") ";
 }
 
-$sql = "SELECT e.timestamp,e.item_id, e.user_id, u.login, u.name, u.lastname, i.label
-        FROM ".$pre."items_edition AS e
-        INNER JOIN ".$pre."items as i ON (e.item_id=i.id)
-        INNER JOIN ".$pre."users as u ON (e.user_id=u.id)
-        $sWhere
-        $sOrder
-        $sLimit";
+DB::query("SELECT timestamp FROM ".$pre."items_edition");
+$iTotal = DB::count();
 
-$rResult = mysql_query($sql) or die(mysql_error()." ; ".$sql);
+$rows = DB::query(
+    "SELECT e.timestamp, e.item_id, e.user_id, u.login, u.name, u.lastname, i.label
+    FROM ".$pre."items_edition AS e
+    INNER JOIN ".$pre."items as i ON (e.item_id=i.id)
+    INNER JOIN ".$pre."users as u ON (e.user_id=u.id)
+    $sWhere
+    $sOrder
+    $sLimit",
+    array(
+        '0' => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        '1' => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        '2' => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        '3' => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        '4' => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING)
+    )
+);
 
-/* Data set length after filtering */
-$sql_f = "
-        SELECT FOUND_ROWS()
-";
-$rResultFilterTotal = mysql_query($sql_f) or die(mysql_error());
-$aResultFilterTotal = mysql_fetch_array($rResultFilterTotal);
-$iFilteredTotal = $aResultFilterTotal[0];
-
-/* Total data set length */
-$sql_c = "
-        SELECT COUNT(timestamp)
-        FROM   ".$pre."items_edition
-";
-$rResultTotal = mysql_query($sql_c) or die(mysql_error());
-$aResultTotal = mysql_fetch_array($rResultTotal);
-$iTotal = $aResultTotal[0];
+$iFilteredTotal = DB::count();
 
 /*
  * Output
@@ -108,25 +112,24 @@ $sOutput .= '"iTotalRecords": '.$iTotal.', ';
 $sOutput .= '"iTotalDisplayRecords": '.$iFilteredTotal.', ';
 $sOutput .= '"aaData": [ ';
 
-$rows = $db->fetchAllArray($sql);
-foreach ($rows as $reccord) {
+foreach ($rows as $record) {
     $get_item_in_list = true;
     $sOutput_item = "[";
 
     //col1
-    $sOutput_item .= '"<img src=\"includes/images/delete.png\" onClick=\"killEntry(\'items_edited\', '.$reccord['item_id'].')\" style=\"cursor:pointer;\" />", ';
+    $sOutput_item .= '"<img src=\"includes/images/delete.png\" onClick=\"killEntry(\'items_edited\', '.$record['item_id'].')\" style=\"cursor:pointer;\" />", ';
 
     //col2
-    $time_diff = intval(time() - $reccord['timestamp']);
+    $time_diff = intval(time() - $record['timestamp']);
     $hoursDiff = round($time_diff / 3600, 0, PHP_ROUND_HALF_DOWN);
     $minutesDiffRemainder = floor($time_diff % 3600 / 60);
     $sOutput_item .= '"'.$hoursDiff . "h " . $minutesDiffRemainder . "m".'", ';
 
     //col3
-    $sOutput_item .= '"'.htmlspecialchars(stripslashes($reccord['name']), ENT_QUOTES).' '.htmlspecialchars(stripslashes($reccord['lastname']), ENT_QUOTES).' ['.htmlspecialchars(stripslashes($reccord['login']), ENT_QUOTES).']", ';
+    $sOutput_item .= '"'.htmlspecialchars(stripslashes($record['name']), ENT_QUOTES).' '.htmlspecialchars(stripslashes($record['lastname']), ENT_QUOTES).' ['.htmlspecialchars(stripslashes($record['login']), ENT_QUOTES).']", ';
 
     //col5 - TAGS
-    $sOutput_item .= '"'.htmlspecialchars(stripslashes($reccord['label']), ENT_QUOTES).'"';
+    $sOutput_item .= '"'.htmlspecialchars(stripslashes($record['label']), ENT_QUOTES).'"';
 
     //Finish the line
     $sOutput_item .= '], ';

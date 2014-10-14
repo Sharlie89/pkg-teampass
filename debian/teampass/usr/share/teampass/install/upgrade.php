@@ -1,4 +1,5 @@
 <?php
+require_once('../sources/sessions.php');
 session_start();
 //Session teampass tag
 $_SESSION['CPM'] = 1;
@@ -41,6 +42,8 @@ if (file_exists($filename)) {    // && empty($_SESSION['server'])
             $_SESSION['user'] = getSettingValue($val);
         } elseif (substr_count($val,'$pass = ')>0) {
             $_SESSION['pass'] = getSettingValue($val);
+        } elseif (substr_count($val,'$port = ')>0) {
+            $_SESSION['port'] = getSettingValue($val);
         } elseif (substr_count($val,'$database = ')>0) {
             $_SESSION['database'] = getSettingValue($val);
         } elseif (substr_count($val,'$pre = ')>0) {
@@ -68,16 +71,16 @@ if (
     <head>
         <title>TeamPass Installation</title>
         <link rel="stylesheet" href="install.css" type="text/css" />
-        <script type="text/javascript" src="../includes/js/functions.js"></script>
-        <script type="text/javascript" src="install.js"></script>
         <script type="text/javascript" src="js/jquery.min.js"></script>
         <script type="text/javascript" src="js/jquery-ui.min.js"></script>
-        <script type="text/javascript" src="gauge/gauge.js"></script>
         <script type="text/javascript" src="js/aes.min.js"></script>
+        <script type="text/javascript" src="install_old.js"></script>
+        <script type="text/javascript" src="../includes/js/functions.js"></script>
 
         <script type="text/javascript">
         //if (typeof $=='undefined') {function $(v) {return(document.getElementById(v));}}
         $(function() {
+            /*
             if (document.getElementById("progressbar")) {
                 gauge.add($("progressbar"), { width:600, height:30, name: 'pbar', limit: true, gradient: true, scale: 10, colors:['#ff0000','#00ff00']});
                 if (document.getElementById("step").value == "1") gauge.modify($('pbar'),{values:[0.20,1]});
@@ -86,6 +89,7 @@ if (
                 else if (document.getElementById("step").value == "4") gauge.modify($('pbar'),{values:[0.70,1]});
                 else if (document.getElementById("step").value == "5") gauge.modify($('pbar'),{values:[0.85,1]});
             }
+            */
         });
 
         function aes_encrypt(text)
@@ -121,6 +125,7 @@ if (
                     "&db_login="+escape(document.getElementById("db_login").value)+
                     "&tbl_prefix="+escape(document.getElementById("tbl_prefix").value)+
                     "&db_password="+aes_encrypt(document.getElementById("db_pw").value)+
+                    "&db_port="+(document.getElementById("db_port").value)+
 	            	"&db_bdd="+document.getElementById("db_bdd").value+
 	            	"&no_maintenance_mode="+maintenance;
                 } else
@@ -172,7 +177,6 @@ if (
                     	$("#change_pw_encryption_progress").html("Done");
                     	$("#but_encrypt_continu").hide();
                     	/* Unlock this step */
-                        gauge.modify($("pbar"),{values:[0.75,1]});
                         document.getElementById("but_next").disabled = "";
                         document.getElementById("but_launch").disabled = "disabled";
                         document.getElementById("res_step4").innerHTML = "dataBase has been populated";
@@ -195,7 +199,9 @@ if (isset($_POST['db_host'])) {
     $_SESSION['db_bdd'] = $_POST['db_bdd'];
     $_SESSION['db_login'] = $_POST['db_login'];
     $_SESSION['db_pw'] = $_POST['db_pw'];
+    $_SESSION['db_port'] = $_POST['db_port'];
     $_SESSION['tbl_prefix'] = $_POST['tbl_prefix'];
+	//$_SESSION['session_start'] = $_POST['session_start'];
     if (isset($_POST['send_stats'])) {
         $_SESSION['send_stats'] = $_POST['send_stats'];
     } else {
@@ -289,7 +295,7 @@ if (!isset($_GET['step']) && !isset($_POST['step'])) {
                      <span style="padding-left:30px;font-size:13pt;">Directory "/upload/" is writable</span><br />
                      <span style="padding-left:30px;font-size:13pt;">PHP extension "mcrypt" is loaded</span><br />
                      <span style="padding-left:30px;font-size:13pt;">PHP extension "openssl" is loaded</span><br />
-                     <span style="padding-left:30px;font-size:13pt;">PHP version is gretter or equal to 5.3.0</span><br />
+                     <span style="padding-left:30px;font-size:13pt;">PHP version is greater or equal to 5.3.0</span><br />
                      </div>
                      <div style="margin-top:20px;font-weight:bold;text-align:center;height:27px;" id="res_step1"></div>
                      <div style="margin-top:20px;font-weight:bold;text-align:center;height:27px;" id="res_step1_error"></div>
@@ -302,11 +308,12 @@ if (!isset($_GET['step']) && !isset($_POST['step'])) {
     //ETAPE 2
     echo '
                      <h3>Step 2</h3>
-                     <fieldset><legend>dataBase Informations</legend>
+                     <fieldset><legend>DataBase Informations</legend>
                      <label for="db_host">Host :</label><input type="text" id="db_host" name="db_host" class="step" value="'.$_SESSION['server'].'" /><br />
-                     <label for="db_db">dataBase name :</label><input type="text" id="db_bdd" name="db_bdd" class="step" value="'.$_SESSION['database'].'" /><br />
+                     <label for="db_db">DataBase name :</label><input type="text" id="db_bdd" name="db_bdd" class="step" value="'.$_SESSION['database'].'" /><br />
                      <label for="db_login">Login :</label><input type="text" id="db_login" name="db_login" class="step" value="'.$_SESSION['user'].'" /><br />
                      <label for="db_pw">Password :</label><input type="text" id="db_pw" name="db_pw" class="step" value="'.$_SESSION['pass'].'" /><br />
+                     <label for="db_port">Port :</label><input type="text" id="db_port" name="db_port" class="step" value="',isset($_SESSION['port']) ? $_SESSION['port'] : "3306",'" /><br />
                      <label for="tbl_prefix">Table prefix :</label><input type="text" id="tbl_prefix" name="tbl_prefix" class="step" value="'.$_SESSION['pre'].'" />
                      </fieldset>
 
@@ -314,13 +321,13 @@ if (!isset($_GET['step']) && !isset($_POST['step'])) {
                      <p>
                      	<input type="checkbox" name="no_maintenance_mode" id="no_maintenance_mode"  />&nbsp;Don\'t activate the Maintenance mode
 					 </p>
-					 <i>By default, the maintenance mode is enabled when Update is performed. This prevents any user to use Teampass during the scripts are running.<br />
-					 Any how, some administrators may want to disturb the users. Then please disable the maintenance mode. Nevertheless keep in mind that update process may fail due to parallal queries.</i>
+					 <i>By default, the maintenance mode is enabled when an Update is performed. This prevents the use of TeamPass while the scripts are running.<br />
+					 However, some administrators may prefer to warn the users in another way. Nevertheless, keep in mind that the update process may fail or even be corrupted due to parallel queries.</i>
 					 </fieldset>
 
                      <fieldset><legend>Anonymous statistics</legend>
                      <input type="checkbox" name="send_stats" id="send_stats" />Send monthly anonymous statistics.<br />
-                     <i>Please considere sending your statistics as a way to contribute to futur improvments of TeamPass. Indeed this will help the creator to evaluate how the tool is used and by this way how to improve the tool. When enabled, the tool will automatically send once by month a bunch of statistics without any action from you. Of course, those data are absolutely anonymous and no data is exported, just the next informations : number of users, number of folders, number of items, tool version, ldap enabled, and personal folders enabled.<br>
+                     <i>Please consider sending your statistics as a way to contribute to futur improvements of TeamPass. Indeed this will help the creator to evaluate how the tool is used and by this way how to improve the tool. When enabled, the tool will automatically send once by month a bunch of statistics without any action from you. Of course, those data are absolutely anonymous and no data is exported, just the next informations : number of users, number of folders, number of items, tool version, ldap enabled, and personal folders enabled.<br>
                      This option can be enabled or disabled through the administration panel.</i>
                      </fieldset>
 
@@ -382,10 +389,13 @@ if (!isset($_GET['step']) && !isset($_POST['step'])) {
                          <tr><td>Add table "categories"</td><td><span id="tbl_20"></span></td></tr>
                          <tr><td>Add table "categories_items"</td><td><span id="tbl_21"></span></td></tr>
                          <tr><td>Add table "categories_folders"</td><td><span id="tbl_22"></span></td></tr>
+                         <tr><td>Add table "api"</td><td><span id="tbl_23"></span></td></tr>
+                         <tr><td>Add table "otv"</td><td><span id="tbl_24"></span></td></tr>
+                         <tr><td>Add table "suggestion"</td><td><span id="tbl_25"></span></td></tr>
                      </table>
                      <div style="display:none;" id="change_pw_encryption">
                          <br />
-                         <p><b>Encryption protocol of existing passwords has now to be started. It may take several minutes.</b></p>
+                         <p><b>Encryption protocol of existing passwords now has to be started. It may take several minutes.</b></p>
                          <p>
                              <div style="display:none;" id="change_pw_encryption_progress"></div>
                          </p>
@@ -432,10 +442,10 @@ if (!isset($_GET['step']) && !isset($_POST['step'])) {
     //ETAPE 5
     echo '
         <h3>Step 6</h3>
-        Upgrade is now finished!<br />
-        You can delete "Install" directory from your server for more security.<br /><br />
+        Upgrade is now completed!<br />
+        You can delete the "Install" directory from your server for increased security.<br /><br />
         For news, help and information, visit the <a href="http://teampass.net" target="_blank">TeamPass website</a>.<br /><br />
-        IMPORTANT: Due to encryption credentials changed during update, you need to clean the cache of your Internet Browser in order to log yourself successfully.';
+        IMPORTANT: Due to encryption credentials changed during the update, you need to clean the cache of your Web Browser in order to log in successfully.';
 }
 
 //buttons

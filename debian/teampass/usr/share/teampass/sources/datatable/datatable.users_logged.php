@@ -2,8 +2,8 @@
 /**
  * @file          datatable.users_logged.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -11,6 +11,8 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
+
+require_once('../sessions.php');
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1) {
     die('Hacking attempt...');
@@ -24,13 +26,18 @@ header("Content-type: text/html; charset=utf-8");
 require_once $_SESSION['settings']['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
 
 //Connect to DB
-$db = new SplClassLoader('Database\Core', '../../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
 //Columns name
 $aColumns = array('login', 'name', 'lastname', 'timestamp', 'last_connexion');
+$aSortTypes = array('ASC', 'DESC');
 
 //init SQL variables
 $sOrder = $sLimit = "";
@@ -39,19 +46,22 @@ $sOrder = $sLimit = "";
 //Paging
 $sLimit = "";
 if (isset($_GET['iDisplayStart']) && $_GET['iDisplayLength'] != '-1') {
-    $sLimit = "LIMIT ". $_GET['iDisplayStart'] .", ". $_GET['iDisplayLength'] ;
+    $sLimit = "LIMIT ". filter_var($_GET['iDisplayStart'], FILTER_SANITIZE_NUMBER_INT) .", ". filter_var($_GET['iDisplayLength'], FILTER_SANITIZE_NUMBER_INT)."";
 }
 
 //Ordering
 
-if (isset($_GET['iSortCol_0'])) {
+if (isset($_GET['iSortCol_0']) && in_array($_GET['iSortCol_0'], $aSortTypes)) {
     $sOrder = "ORDER BY  ";
-    for ($i=0; $i<intval($_GET['iSortingCols']); $i++) {
-        if ($_GET[ 'bSortable_'.intval($_GET['iSortCol_'.$i]) ] == "true") {
-            $sOrder .= $aColumns[ intval($_GET['iSortCol_'.$i]) ]."
-            ".mysql_real_escape_string($_GET['sSortDir_'.$i]) .", ";
-        }
-    }
+	for ($i=0; $i<intval($_GET['iSortingCols']); $i++) {
+		if (
+			$_GET[ 'bSortable_'.filter_var($_GET['iSortCol_'.$i], FILTER_SANITIZE_NUMBER_INT)] == "true" &&
+			preg_match("#^(asc|desc)\$#i", $_GET['sSortDir_'.$i])
+		) {
+			$sOrder .= "".$aColumns[ filter_var($_GET['iSortCol_'.$i], FILTER_SANITIZE_NUMBER_INT) ]." "
+			.mysqli_escape_string($link, $_GET['sSortDir_'.$i]) .", ";
+		}
+	}
 
     $sOrder = substr_replace($sOrder, "", -2);
     if ($sOrder == "ORDER BY") {
@@ -69,38 +79,33 @@ $sWhere = " WHERE ((timestamp != '' AND session_end >= '".time()."')";
 if ($_GET['sSearch'] != "") {
     $sWhere .= " AND (";
     for ($i=0; $i<count($aColumns); $i++) {
-        $sWhere .= $aColumns[$i]." LIKE '%".mysql_real_escape_string($_GET['sSearch'])."%' OR ";
+        $sWhere .= $aColumns[$i]." LIKE %ss_".$aColumns[$i]." OR ";
     }
     $sWhere = substr_replace($sWhere, "", -3);
     $sWhere .= ") ";
 }
 $sWhere .= ") ";
 
-$sql = "SELECT *
-        FROM ".$pre."users
-        $sWhere
-        $sOrder
-        $sLimit";
-
-$rResult = mysql_query($sql) or die(mysql_error()." ; ".$sql);
-
-/* Data set length after filtering */
-$sql_f = "
-        SELECT FOUND_ROWS()
-";
-$rResultFilterTotal = mysql_query($sql_f) or die(mysql_error());
-$aResultFilterTotal = mysql_fetch_array($rResultFilterTotal);
-$iFilteredTotal = $aResultFilterTotal[0];
-
-/* Total data set length */
-$sql_c = "
-        SELECT COUNT(timestamp)
+DB::query("SELECT COUNT(timestamp)
         FROM   ".$pre."users
-        WHERE timestamp != '' AND session_end >= '".time()."'
-";
-$rResultTotal = mysql_query($sql_c) or die(mysql_error());
-$aResultTotal = mysql_fetch_array($rResultTotal);
-$iTotal = $aResultTotal[0];
+        WHERE timestamp != '' AND session_end >= '".time()."'");
+$iTotal = DB::count();
+
+$rows = DB::query(
+    "SELECT * FROM ".$pre."users
+    $sWhere
+    $sOrder
+    $sLimit",
+    array(
+        $aColumns[0] => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        $aColumns[1] => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        $aColumns[2] => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        $aColumns[3] => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING),
+        $aColumns[4] => filter_var($_GET['sSearch'], FILTER_SANITIZE_STRING)
+    )
+);
+
+$iFilteredTotal = DB::count();
 
 /*
  * Output
@@ -111,7 +116,6 @@ $sOutput .= '"iTotalRecords": '.$iTotal.', ';
 $sOutput .= '"iTotalDisplayRecords": '.$iFilteredTotal.', ';
 $sOutput .= '"aaData": [ ';
 
-$rows = $db->fetchAllArray($sql);
 foreach ($rows as $reccord) {
     $get_item_in_list = true;
     $sOutput_item = "[";
@@ -124,11 +128,11 @@ foreach ($rows as $reccord) {
 
     //col3
     if ($reccord['admin'] == "1") {
-        $user_role = $txt['god'];
+        $user_role = $LANG['god'];
     } elseif ($reccord['gestionnaire'] == 1) {
-        $user_role = $txt['gestionnaire'];
+        $user_role = $LANG['gestionnaire'];
     } else {
-        $user_role = $txt['user'];
+        $user_role = $LANG['user'];
     }
     $sOutput_item .= '"'.$user_role.'", ';
 

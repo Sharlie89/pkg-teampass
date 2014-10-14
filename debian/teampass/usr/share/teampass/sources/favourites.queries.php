@@ -2,8 +2,8 @@
 /**
  * @file          favourites.queries.php
  * @author        Nils Laumaillé
- * @version       2.1.19
- * @copyright     (c) 2009-2013 Nils Laumaillé
+ * @version       2.1.21
+ * @copyright     (c) 2009-2014 Nils Laumaillé
  * @licensing     GNU AFFERO GPL 3.0
  * @link          http://www.teampass.net
  *
@@ -12,6 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+require_once('sessions.php');
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']) || empty($_SESSION['key'])) {
     die('Hacking attempt...');
@@ -22,19 +23,23 @@ include $_SESSION['settings']['cpassman_dir'].'/includes/settings.php';
 header("Content-type: text/html; charset==utf-8");
 
 // connect to DB
-$db = new SplClassLoader('Database\Core', '../includes/libraries');
-$db->register();
-$db = new Database\Core\DbCore($server, $user, $pass, $database, $pre);
-$db->connect();
+require_once $_SESSION['settings']['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+DB::$host = $server;
+DB::$user = $user;
+DB::$password = $pass;
+DB::$dbName = $database;
+DB::$port = $port;
+DB::$error_handler = 'db_error_handler';
+$link = mysqli_connect($server, $user, $pass, $database, $port);
 
-// Construction de la requ?te en fonction du type de valeur
+// manage action required
 if (!empty($_POST['type'])) {
     switch ($_POST['type']) {
         #CASE adding a new function
         case "del_fav":
             //Get actual favourites
-            $data = $db->fetchRow("SELECT favourites FROM ".$pre."users WHERE id = '".$_SESSION['user_id']."'");
-            $tmp = explode(";", $data[0]);
+            $data = DB::queryfirstrow("SELECT favourites FROM ".$pre."users WHERE id = %i", $_SESSION['user_id']);
+            $tmp = explode(";", $data['favourites']);
             $favs = "";
             $tab_favs = array();
             //redefine new list of favourites
@@ -49,12 +54,13 @@ if (!empty($_POST['type'])) {
                 }
             }
             //update user's account
-            $db->queryUpdate(
-                "users",
+            DB::update(
+                $pre."users",
                 array(
                     'favourites' => $favs
                ),
-                "id = '".$_SESSION['user_id']."'"
+                "id = %i",
+                $_SESSION['user_id']
             );
             //update session
             $_SESSION['favourites'] = $tab_favs;
