@@ -1,0 +1,17 @@
+Package: teampass
+Version: 2.1.21
+Architecture: all
+Maintainer: Carlos Álvarez Barba <sharlie89@gmail.com>
+Installed-Size: 15484
+Depends: libapache2-mod-php5, php5, mysql-client, php5-gd, php5-mcrypt, php5-mysql, php5-mysqlnd
+Section: unknown
+Priority: extra
+Homepage: http://www.teampass.net
+Description: WEB-based password manager
+ TeamPass is a Passwords Manager dedicated for managing passwords
+ in a collaborative way on any server Apache, MySQL and PHP.
+ It is especially designed to provide passwords access security
+ for allowed people.
+ This makes TeamPass really useful in a Buisiness/Enterprise environment
+ and will provide to IT or Team Manager a powerful and easy tool
+ for customizing passwords access depending on the user’s role.

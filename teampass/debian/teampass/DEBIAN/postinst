@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -e
+
+ln -s /usr/share/teampass/* /srv/www/teampass/
+
+chown -R www-data:www-data /srv/www/teampass/
+
+
+
