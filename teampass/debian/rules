@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+#TP_CONTENT = TeamPass-master/
+
+%:
+	dh $@ 
+
+#override_dh_auto_build:
+override_dh_auto_install:
+
+rm -rf usr/share/teampass/includes/libraries/Authentication/Yubico/COPYING
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-ExtraLight.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-Bold.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-BoldItalic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-Italic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-Bold.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-BoldItalic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-Italic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVu_LICENSE.txt
