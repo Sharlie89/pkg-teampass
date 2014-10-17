@@ -1,0 +1,31 @@
+Source: teampass
+Section: software
+Priority: extra
+Maintainer: Carlos Álvarez Barba <sharlie89@gmail.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.3
+Homepage: http://www.teampass.net
+#Vcs-Git: git://git.debian.org/collab-maint/teampass.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/teampass.git;a=summary
+
+Package: teampass
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         libapache2-mod-php5,
+ 	 php5,
+         mysql-client,
+         php5-gd,
+	 php5-mcrypt,
+         php5-mysql,
+	 php5-mysqlnd,
+	 ttf-dejavu,
+	 ttf-dejavu-core,
+	 ttf-dejavu-extra,
+Description: WEB-based password manager
+ TeamPass is a Passwords Manager dedicated for managing passwords
+ in a collaborative way on any server Apache, MySQL and PHP.
+ It is especially designed to provide passwords access security
+ for allowed people.
+ This makes TeamPass really useful in a Buisiness/Enterprise environment
+ and will provide to IT or Team Manager a powerful and easy tool
+ for customizing passwords access depending on the user’s role.
