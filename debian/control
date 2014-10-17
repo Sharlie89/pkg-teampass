@@ -1,5 +1,5 @@
 Source: teampass
-Section: software
+Section: web
 Priority: extra
 Maintainer: Carlos Álvarez Barba <sharlie89@gmail.com>
 Build-Depends: debhelper (>= 8.0.0)
