@@ -15,27 +15,28 @@
 	dh $@ 
 
 #override_dh_auto_build:
-#	for i in $$(find debian/languages/ -name *.po); do \
-#                msgfmt $$i -o $${i%%.po}.mo; \
-#	done
-#	pod2man --utf8 --center  install TeamPass-master/install 
+override_dh_auto_install:
 
-#override_dh_install:
-#	dh_install -Xlicense.txt -Xlicense.commercial.txt -XLICENSE -XCOPYING
-
-#override_dh_fixperms:
-#	dh_fixperms
-#	chown www-data:www-data $(TP_CONTENT)
-
-# Use like this: debian/rules get-orig-source VERSION=3.4
-#get-orig-source:
-#	@test -n "$(VERSION)" || (echo "Please set VERSION on the command-line. Ex: debian/rules get-orig-source VERSION=3.4" >&2; exit 1)
-#	@test ! -e ../teampass_$(VERSION)+dfsg.orig.tar.xz || (echo "You already have ../teampass__$(VERSION)+dfsg.orig.tar.xz" >&2; exit 1)
-#	uscan --noconf --force-download --rename --download-version $(VERSION) --destdir=.
-#	tar --transform "s,^.[^/]*,teampass-$(VERSION)/," -xzvf \
-#               ./teampass_$(VERSION).orig.tar.gz
-#        rm ./wordpress_$(VERSION).orig.tar.gz
-#        cd wordpress-$(VERSION) && rm $(UPSTREAM_FILE_BLACKLIST)
-#	tar -acvf ../teampass_$(VERSION)+dfsg.orig.tar.xz teampass-$(VERSION)
-#	rm -rf teampass-$(VERSION)
-#	@echo "Successfully created ../teampass_$(VERSION)+dfsg.orig.tar.xz"
+rm -rf usr/share/teampass/includes/libraries/Authentication/Yubico/COPYING
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-ExtraLight.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSans.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-Bold.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansCondensed.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-BoldOblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono-Oblique.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSansMono.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-Bold.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-BoldItalic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif-Italic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerif.ttf also in ttf-dejavu-core
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-Bold.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-BoldItalic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed-Italic.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVuSerifCondensed.ttf also in ttf-dejavu-extra
+rm -rf usr/share/teampass/includes/libraries/Pdf/Tfpdf/font/unifont/DejaVu_LICENSE.txt

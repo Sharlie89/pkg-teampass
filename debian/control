@@ -1,5 +1,5 @@
 Source: teampass
-Section: unknown
+Section: software
 Priority: extra
 Maintainer: Carlos Álvarez Barba <sharlie89@gmail.com>
 Build-Depends: debhelper (>= 8.0.0)
@@ -18,6 +18,9 @@ Depends: ${shlibs:Depends}, ${misc:Depends},
 	 php5-mcrypt,
          php5-mysql,
 	 php5-mysqlnd,
+	 ttf-dejavu,
+	 ttf-dejavu-core,
+	 ttf-dejavu-extra,
 Description: WEB-based password manager
  TeamPass is a Passwords Manager dedicated for managing passwords
  in a collaborative way on any server Apache, MySQL and PHP.

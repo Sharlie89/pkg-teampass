@@ -1,14 +1,13 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: teampass
-Source: <url://example.com>
+Source: <http://www.teampass.net>
 
-Files: *
-Copyright: <years> <put author's name and email here>
-           <years> <likewise for another author>
+Files: TeamPass-Master/*
+Copyright: <2014> <Nils Laumaillé nils@teampass.net>
 License: GPL-3.0+
 
 Files: debian/*
-Copyright: 2013 Carlos Álvarez Barba (Sharlie) <sharlie89@gmail.com>
+Copyright: 2014 Carlos Álvarez Barba (Sharlie) <sharlie89@gmail.com>
 License: GPL-3.0+
 
 License: GPL-3.0+
