@@ -10,6 +10,12 @@ Files: debian/*
 Copyright: 2014 Carlos Álvarez Barba (Sharlie) <sharlie89@gmail.com>
 License: GPL-3.0+
 
+Files: TeamPass-Master/usr/share/teampass/includes/libraries/Authentication/Yubico/*
+Copyright: <Simmon Josefsson simon@yubico.com>
+License: GPL-3.0+
+
+
+
 License: GPL-3.0+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -27,7 +33,3 @@ License: GPL-3.0+
  On Debian systems, the complete text of the GNU General
  Public License version 3 can be found in "/usr/share/common-licenses/GPL-3".
 
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
-# Please avoid to pick license terms that are more restrictive than the
-# packaged work, as it may make Debian's contributions unacceptable upstream.
